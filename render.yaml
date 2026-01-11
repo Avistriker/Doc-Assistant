@@ -1,13 +1,15 @@
 # render.yaml
 services:
   - type: web
-    name: chatgenius-document-assistant
+    name: asr-innovations-document-assistant
     env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
     region: ohio
     plan: free
     
     # Use Python 3.11 for better compatibility
-    pythonVersion: "3.11.0"
+    pythonVersion: "3.11.9"
     
     # Build Configuration
     buildCommand: |
