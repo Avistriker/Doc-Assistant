@@ -4,4 +4,3 @@ requests==2.31.0
 PyPDF2==3.0.1
 beautifulsoup4==4.12.2
 python-dotenv==1.0.0
-polars==1.37.0
