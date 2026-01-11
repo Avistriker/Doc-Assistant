@@ -3,28 +3,30 @@ services:
   - type: web
     name: chatgenius-document-assistant
     env: python
-    region: ohio  # or singapore, frankfurt, oregon
-    plan: free  # or starter, pro, etc.
+    region: ohio
+    plan: free
+    
+    # Use Python 3.11 for better compatibility
+    pythonVersion: "3.11.0"
     
     # Build Configuration
     buildCommand: |
+      pip install --upgrade pip setuptools wheel
       pip install -r requirements.txt
       mkdir -p templates static uploads
     
     # Start Command
-    startCommand: gunicorn --worker-tmp-dir /dev/shm --workers=2 --threads=4 --worker-class=gunicorn.workers.GunicornUvicornWorker app:app
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT
     
     # Health Check
     healthCheckPath: /
     
     # Environment Variables
     envVars:
+      - key: PORT
+        value: "10000"
       - key: FLASK_DEBUG
         value: "False"
-      - key: FLASK_HOST
-        value: "0.0.0.0"
-      - key: FLASK_PORT
-        value: "10000"
       - key: SECRET_KEY
         generateValue: true
       - key: UPLOAD_FOLDER
@@ -36,30 +38,15 @@ services:
       - key: RATE_LIMIT_PER_MINUTE
         value: "60"
       - key: ENABLE_AI_MODE
-        value: "True"  # Set to "False" if you don't want AI features
+        value: "True"
       - key: DEFAULT_CHAT_MODE
-        value: "no_ai"  # Default to no_ai mode
-      
-      # DeepSeek API Configuration (optional - add these in Render dashboard)
-      - key: DEEPSEEK_API_KEY
-        sync: false  # Set this in Render dashboard manually
-      - key: DEEPSEEK_BASE_URL
-        value: "https://api.deepseek.com"
-      - key: MODEL_NAME
-        value: "deepseek-chat"
+        value: "no_ai"
     
-    # Auto-Deploy
-    autoDeploy: true
-    
-    # Disk Configuration (for uploads)
+    # Disk Configuration
     disk:
       name: uploads
       mountPath: /opt/render/project/src/uploads
       sizeGB: 1
 
-# Optional: Database or other services can be added here
-# databases:
-#   - name: chatgenius-db
-#     databaseName: chatgenius
-#     user: chatgenius_user
-#     plan: free
+    # Auto-Deploy
+    autoDeploy: true
