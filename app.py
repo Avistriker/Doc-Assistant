@@ -7,6 +7,7 @@ from datetime import datetime
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 import logging
+import polars as pl
 
 # Load environment variables from .env file
 load_dotenv()
@@ -161,6 +162,48 @@ def summarize_web_content(content):
     summary_lines = lines[:5] + ["..."] + lines[-5:]
     return '\n'.join(summary_lines)
 
+def analyze_content_with_polars(content_type, content):
+    """Use polars to analyze text content (example function)"""
+    try:
+        if not content:
+            return None
+        
+        # Convert content to polars DataFrame for analysis
+        lines = content.split('\n')
+        df = pl.DataFrame({
+            'line_number': list(range(1, len(lines) + 1)),
+            'text': lines,
+            'length': [len(line) for line in lines]
+        })
+        
+        # Basic statistics using polars
+        stats = {
+            'total_lines': df.height,
+            'total_characters': df['length'].sum(),
+            'avg_line_length': df['length'].mean(),
+            'max_line_length': df['length'].max(),
+            'min_line_length': df['length'].min(),
+            'empty_lines': df.filter(pl.col('length') == 0).height
+        }
+        
+        # Find long lines
+        long_lines = df.filter(pl.col('length') > 100).select(['line_number', 'text', 'length']).head(5)
+        
+        # Word count analysis
+        words = ' '.join(lines).split()
+        word_df = pl.DataFrame({'word': words})
+        word_counts = word_df.group_by('word').agg(pl.count().alias('count')).sort('count', descending=True).head(10)
+        
+        return {
+            'stats': stats,
+            'long_lines': long_lines.to_dicts() if long_lines.height > 0 else [],
+            'top_words': word_counts.to_dicts() if word_counts.height > 0 else []
+        }
+        
+    except Exception as e:
+        logger.error(f"Error analyzing content with polars: {str(e)}")
+        return None
+
 def basic_chat_response(question, pdf_text, web_text):
     """Basic rule-based chat response"""
     question_lower = question.lower()
@@ -176,7 +219,8 @@ def basic_chat_response(question, pdf_text, web_text):
 1. Upload and analyze PDF documents
 2. Scrape and analyze website content
 3. Answer basic questions about loaded content
-4. Switch to AI mode for more advanced questions (if enabled)"""
+4. Switch to AI mode for more advanced questions (if enabled)
+5. Advanced text analysis using polars data processing"""
     
     # Check for content-related questions
     responses = []
@@ -202,6 +246,20 @@ def basic_chat_response(question, pdf_text, web_text):
             responses.append(f"- Pages: {page_count}")
             responses.append(f"- Characters: {char_count:,}")
             responses.append(f"- Preview: {preview[:200]}..." if len(preview) > 200 else f"- Preview: {preview}")
+            
+            # Advanced analysis with polars
+            if 'analyze' in question_lower or 'statistics' in question_lower or 'stats' in question_lower:
+                analysis = analyze_content_with_polars('pdf', pdf_text)
+                if analysis:
+                    responses.append(f"\n📊 **Advanced Analysis (using polars):**")
+                    responses.append(f"- Total lines: {analysis['stats']['total_lines']:,}")
+                    responses.append(f"- Avg line length: {analysis['stats']['avg_line_length']:.1f} chars")
+                    responses.append(f"- Max line length: {analysis['stats']['max_line_length']} chars")
+                    responses.append(f"- Empty lines: {analysis['stats']['empty_lines']}")
+                    
+                    if analysis['top_words']:
+                        top_words = ', '.join([f"{w['word']}({w['count']})" for w in analysis['top_words'][:5]])
+                        responses.append(f"- Top words: {top_words}")
     
     if web_text:
         if any(word in question_lower for word in ['web', 'website', 'site', 'page', 'url']):
@@ -217,6 +275,20 @@ def basic_chat_response(question, pdf_text, web_text):
             responses.append(f"- Lines extracted: {line_count}")
             responses.append(f"- Characters: {char_count:,}")
             responses.append(f"- Preview: {preview[:200]}..." if len(preview) > 200 else f"- Preview: {preview}")
+            
+            # Advanced analysis with polars
+            if 'analyze' in question_lower or 'statistics' in question_lower or 'stats' in question_lower:
+                analysis = analyze_content_with_polars('web', web_text)
+                if analysis:
+                    responses.append(f"\n📊 **Advanced Analysis (using polars):**")
+                    responses.append(f"- Total lines: {analysis['stats']['total_lines']:,}")
+                    responses.append(f"- Avg line length: {analysis['stats']['avg_line_length']:.1f} chars")
+                    responses.append(f"- Max line length: {analysis['stats']['max_line_length']} chars")
+                    responses.append(f"- Empty lines: {analysis['stats']['empty_lines']}")
+                    
+                    if analysis['top_words']:
+                        top_words = ', '.join([f"{w['word']}({w['count']})" for w in analysis['top_words'][:5]])
+                        responses.append(f"- Top words: {top_words}")
     
     if responses:
         return '\n'.join(responses)
@@ -232,8 +304,36 @@ def basic_chat_response(question, pdf_text, web_text):
         else:
             return "No content loaded. Please upload a PDF or scrape a website first."
     
+    # Check for data analysis
+    if any(word in question_lower for word in ['analyze', 'statistics', 'stats', 'data', 'polars']):
+        if pdf_text or web_text:
+            # Analyze whichever content is available
+            content = pdf_text if pdf_text else web_text
+            content_type = 'pdf' if pdf_text else 'web'
+            
+            analysis = analyze_content_with_polars(content_type, content)
+            if analysis:
+                response = f"📊 **Content Analysis Results ({content_type.upper()}):**\n"
+                response += f"- Total lines: {analysis['stats']['total_lines']:,}\n"
+                response += f"- Total characters: {analysis['stats']['total_characters']:,}\n"
+                response += f"- Average line length: {analysis['stats']['avg_line_length']:.1f} characters\n"
+                response += f"- Maximum line length: {analysis['stats']['max_line_length']} characters\n"
+                response += f"- Minimum line length: {analysis['stats']['min_line_length']} characters\n"
+                response += f"- Empty lines: {analysis['stats']['empty_lines']}\n"
+                
+                if analysis['top_words']:
+                    response += f"\n🔤 **Top 5 Most Frequent Words:**\n"
+                    for i, word_data in enumerate(analysis['top_words'][:5], 1):
+                        response += f"{i}. '{word_data['word']}' - {word_data['count']} times\n"
+                
+                return response
+            else:
+                return "Analysis could not be performed on the content."
+        else:
+            return "No content available for analysis. Please upload a PDF or scrape a website first."
+    
     # Default response
-    return "I can analyze your PDF and web content. Please upload a PDF or enter a website URL, then ask specific questions about the content."
+    return "I can analyze your PDF and web content. Please upload a PDF or enter a website URL, then ask specific questions about the content. Use 'analyze' or 'statistics' for advanced data analysis."
 
 # ========== AI FUNCTIONS ==========
 
@@ -303,7 +403,8 @@ def ai_chat_response(question, pdf_text, web_text):
 Answer questions based on the provided context when available. 
 If the context doesn't contain the answer, provide a helpful general response.
 Be concise but informative, and format your responses clearly with proper paragraphs.
-When analyzing PDF or web content, provide detailed insights, summaries, and answer specific questions about the content."""
+When analyzing PDF or web content, provide detailed insights, summaries, and answer specific questions about the content.
+You can also perform statistical analysis if requested."""
     
     user_message = f"Question: {question}\n\n"
     
@@ -376,14 +477,26 @@ def upload_pdf():
         # Create summary
         summary = summarize_pdf_text(extracted_text)
         
-        return jsonify({
+        # Perform initial analysis with polars
+        analysis = analyze_content_with_polars('pdf', extracted_text)
+        
+        response_data = {
             'success': True,
             'message': f'✅ PDF uploaded successfully!',
             'details': f'Extracted {len(extracted_text):,} characters from {num_pages} pages.',
             'summary': summary[:500] + "..." if len(summary) > 500 else summary,
             'preview': extracted_text[:300] + "..." if len(extracted_text) > 300 else extracted_text,
             'num_pages': num_pages
-        })
+        }
+        
+        if analysis:
+            response_data['analysis'] = {
+                'total_lines': analysis['stats']['total_lines'],
+                'total_characters': analysis['stats']['total_characters'],
+                'avg_line_length': float(analysis['stats']['avg_line_length'])
+            }
+        
+        return jsonify(response_data)
         
     except Exception as e:
         logger.error(f"Failed to process PDF {filename}: {str(e)}")
@@ -415,14 +528,56 @@ def scrape_website():
     # Create summary
     summary = summarize_web_content(scraped_content)
     
-    return jsonify({
+    # Perform initial analysis with polars
+    analysis = analyze_content_with_polars('web', scraped_content)
+    
+    response_data = {
         'success': True,
         'message': '✅ Website scraped successfully!',
         'details': f'Extracted {len(scraped_content):,} characters.',
         'summary': summary[:500] + "..." if len(summary) > 500 else summary,
         'preview': scraped_content[:300] + "..." if len(scraped_content) > 300 else scraped_content,
         'lines': len(scraped_content.split('\n'))
-    })
+    }
+    
+    if analysis:
+        response_data['analysis'] = {
+            'total_lines': analysis['stats']['total_lines'],
+            'total_characters': analysis['stats']['total_characters'],
+            'avg_line_length': float(analysis['stats']['avg_line_length'])
+        }
+    
+    return jsonify(response_data)
+
+@app.route('/api/analyze_content', methods=['POST'])
+def analyze_content():
+    """API endpoint for advanced content analysis using polars"""
+    data = request.json
+    content_type = data.get("type", "current")  # pdf, web, or current
+    
+    content = ""
+    if content_type == "pdf":
+        content = pdf_content
+    elif content_type == "web":
+        content = web_content
+    elif content_type == "current":
+        # Use whichever content is available
+        content = pdf_content if pdf_content else web_content
+    
+    if not content:
+        return jsonify({'error': 'No content available for analysis'}), 400
+    
+    analysis = analyze_content_with_polars(content_type, content)
+    
+    if analysis:
+        return jsonify({
+            'success': True,
+            'analysis': analysis,
+            'content_type': content_type,
+            'content_length': len(content)
+        })
+    else:
+        return jsonify({'error': 'Analysis failed'}), 500
 
 @app.route('/api/chat', methods=['POST'])
 def chat():
@@ -531,7 +686,9 @@ def get_status():
         'web_length': len(web_content),
         'history_count': len(chat_history),
         'ai_enabled': ENABLE_AI_MODE,
-        'max_history': CHAT_HISTORY_LIMIT
+        'max_history': CHAT_HISTORY_LIMIT,
+        'polars_version': pl.__version__,
+        'features': ['pdf_analysis', 'web_scraping', 'ai_chat', 'data_analysis']
     })
 
 @app.route('/api/clear_history', methods=['POST'])
@@ -615,10 +772,11 @@ if __name__ == "__main__":
     print(f"Default Mode: {DEFAULT_CHAT_MODE}")
     print(f"Upload Folder: {UPLOAD_FOLDER}")
     print(f"Max File Size: {MAX_CONTENT_LENGTH_MB}MB")
+    print(f"Polars Version: {pl.__version__}")
     print("=" * 60)
     
     # Check dependencies
-    required_packages = ['requests', 'PyPDF2', 'flask', 'bs4', 'python-dotenv']
+    required_packages = ['requests', 'PyPDF2', 'flask', 'bs4', 'python-dotenv', 'polars']
     missing_packages = []
     
     for package in required_packages:
@@ -629,6 +787,8 @@ if __name__ == "__main__":
                 import bs4
             elif package == 'python-dotenv':
                 import dotenv
+            elif package == 'polars':
+                import polars
             else:
                 __import__(package)
         except ImportError:
@@ -652,4 +812,6 @@ if __name__ == "__main__":
     print(f"\n🌐 Starting server on http://{FLASK_HOST}:{FLASK_PORT}")
     print("=" * 60)
     
-    app.run(debug=FLASK_DEBUG, port=FLASK_PORT, host=FLASK_HOST)
+    # Use Render's PORT environment variable if available
+    port = int(os.environ.get("PORT", FLASK_PORT))
+    app.run(debug=FLASK_DEBUG, port=port, host=FLASK_HOST)
