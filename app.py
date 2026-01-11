@@ -7,46 +7,41 @@ from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 import logging
 
-# Load environment variables from .env file
+# Load environment variables
 load_dotenv()
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# ========== CONFIGURATION ==========
-
-# DeepSeek API configuration
+# Configuration
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
 DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
 MODEL_NAME = os.getenv("MODEL_NAME", "deepseek-chat")
 
-# Flask configuration
 FLASK_DEBUG = os.getenv("FLASK_DEBUG", "False").lower() == "true"
 FLASK_PORT = int(os.getenv("FLASK_PORT", "5000"))
 FLASK_HOST = os.getenv("FLASK_HOST", "0.0.0.0")
 SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-key-change-in-production")
 
-# Application settings
-UPLOAD_FOLDER = os.getenv("UPLOAD_FOLDER", "/tmp/uploads")
+UPLOAD_FOLDER = os.getenv("UPLOAD_FOLDER", "uploads")
 MAX_CONTENT_LENGTH_MB = int(os.getenv("MAX_CONTENT_LENGTH_MB", "16"))
 CHAT_HISTORY_LIMIT = int(os.getenv("CHAT_HISTORY_LIMIT", "100"))
 ENABLE_AI_MODE = os.getenv("ENABLE_AI_MODE", "True").lower() == "true"
 DEFAULT_CHAT_MODE = os.getenv("DEFAULT_CHAT_MODE", "no_ai")
 
-# Initialize Flask app
-flask_app = Flask(__name__)  # Changed from 'app' to 'flask_app' to avoid conflict
-flask_app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-flask_app.config['MAX_CONTENT_LENGTH'] = MAX_CONTENT_LENGTH_MB * 1024 * 1024
-flask_app.config['SECRET_KEY'] = SECRET_KEY
+# Initialize Flask app - IMPORTANT: Name must be 'app' for Gunicorn
+app = Flask(__name__)
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['MAX_CONTENT_LENGTH'] = MAX_CONTENT_LENGTH_MB * 1024 * 1024
+app.config['SECRET_KEY'] = SECRET_KEY
 
-# Create upload directory
-os.makedirs(flask_app.config['UPLOAD_FOLDER'], exist_ok=True)
+# Create directories
+os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+os.makedirs('templates', exist_ok=True)
+os.makedirs('static', exist_ok=True)
 
-# Global variables to store content
+# Global variables
 pdf_content = ""
 web_content = ""
 chat_mode = DEFAULT_CHAT_MODE
@@ -78,7 +73,6 @@ def summarize_pdf_text(text, max_sentences=5):
     if not text:
         return "No text extracted from PDF."
     
-    # Simple summary: take first few sentences and last few sentences
     sentences = text.replace('\n', ' ').split('. ')
     
     if len(sentences) <= max_sentences * 2:
@@ -92,7 +86,6 @@ def summarize_pdf_text(text, max_sentences=5):
 def scrape_website_simple(url):
     """Simple web scraper without AI"""
     try:
-        # Validate URL
         if not url.startswith(('http://', 'https://')):
             url = 'https://' + url
         
@@ -103,27 +96,21 @@ def scrape_website_simple(url):
         response = requests.get(url, headers=headers, timeout=10)
         response.raise_for_status()
         
-        # Parse HTML with BeautifulSoup
         soup = BeautifulSoup(response.content, 'html.parser')
         
-        # Remove script and style elements
         for script in soup(["script", "style"]):
             script.decompose()
         
-        # Get text from paragraphs and headings
         text_elements = []
         
-        # Get headings
         for heading in soup.find_all(['h1', 'h2', 'h3']):
             text_elements.append(heading.get_text(strip=True))
         
-        # Get paragraphs
         for paragraph in soup.find_all('p'):
             para_text = paragraph.get_text(strip=True)
             if para_text and len(para_text) > 20:
                 text_elements.append(para_text)
         
-        # Get list items
         for li in soup.find_all('li'):
             li_text = li.get_text(strip=True)
             if li_text and len(li_text) > 10:
@@ -132,7 +119,6 @@ def scrape_website_simple(url):
         content = '\n'.join(text_elements[:50])
         
         if not content:
-            # Fallback: get all text
             content = soup.get_text()
             lines = [line.strip() for line in content.split('\n') if line.strip()]
             content = '\n'.join(lines[:100])
@@ -157,14 +143,13 @@ def summarize_web_content(content):
     return '\n'.join(summary_lines)
 
 def analyze_content_simple(content):
-    """Simple content analysis without external libraries"""
+    """Simple content analysis"""
     if not content:
         return None
     
     lines = content.split('\n')
     words = ' '.join(lines).split()
     
-    # Calculate statistics
     stats = {
         'total_lines': len(lines),
         'total_characters': len(content),
@@ -175,13 +160,11 @@ def analyze_content_simple(content):
         'empty_lines': sum(1 for line in lines if not line.strip())
     }
     
-    # Word frequency (simple implementation)
     word_freq = {}
     for word in words:
         word_lower = word.lower()
         word_freq[word_lower] = word_freq.get(word_lower, 0) + 1
     
-    # Get top 10 words
     top_words = sorted(word_freq.items(), key=lambda x: x[1], reverse=True)[:10]
     
     return {
@@ -193,12 +176,10 @@ def basic_chat_response(question, pdf_text, web_text):
     """Basic rule-based chat response"""
     question_lower = question.lower()
     
-    # Check for greetings
     greetings = ['hello', 'hi', 'hey', 'greetings']
     if any(greet in question_lower for greet in greetings):
         return "Hello! I'm your document assistant. I can help you with PDF and web content analysis."
     
-    # Check for help
     if 'help' in question_lower:
         return """I can help you with:
 1. Upload and analyze PDF documents
@@ -244,7 +225,6 @@ def basic_chat_response(question, pdf_text, web_text):
     if responses:
         return '\n'.join(responses)
     
-    # Check for summary requests
     if 'summary' in question_lower or 'summarize' in question_lower:
         if pdf_text:
             summary = summarize_pdf_text(pdf_text)
@@ -255,7 +235,6 @@ def basic_chat_response(question, pdf_text, web_text):
         else:
             return "No content loaded. Please upload a PDF or scrape a website first."
     
-    # Check for analysis requests
     if any(word in question_lower for word in ['analyze', 'statistics', 'stats', 'data']):
         if pdf_text or web_text:
             content = pdf_text if pdf_text else web_text
@@ -281,10 +260,7 @@ def basic_chat_response(question, pdf_text, web_text):
         else:
             return "No content available for analysis. Please upload a PDF or scrape a website first."
     
-    # Default response
     return "I can analyze your PDF and web content. Please upload a PDF or enter a website URL, then ask specific questions about the content."
-
-# ========== AI FUNCTIONS ==========
 
 def call_deepseek_api(messages, temperature=0.1, top_p=0.1, max_tokens=2000):
     """Call DeepSeek API for AI responses"""
@@ -333,7 +309,6 @@ def ai_chat_response(question, pdf_text, web_text):
     if not ENABLE_AI_MODE:
         return "AI mode is disabled. Please enable it in the configuration."
     
-    # Build context from loaded content
     context_parts = []
     
     if pdf_text:
@@ -354,7 +329,6 @@ When analyzing PDF or web content, provide detailed insights, summaries, and ans
     
     user_message = f"Question: {question}\n\n"
     
-    # Add content status information
     content_status = []
     if pdf_text:
         pdf_lines = pdf_text.split('\n')
@@ -381,14 +355,14 @@ When analyzing PDF or web content, provide detailed insights, summaries, and ans
 
 # ========== ROUTES ==========
 
-@flask_app.route('/')
+@app.route('/')
 def index():
     """Render main chat interface"""
     return render_template('chat.html', 
                          ai_enabled=ENABLE_AI_MODE,
                          default_mode=DEFAULT_CHAT_MODE)
 
-@flask_app.route('/api/upload_pdf', methods=['POST'])
+@app.route('/api/upload_pdf', methods=['POST'])
 def upload_pdf():
     """Handle PDF upload for both modes"""
     global pdf_content
@@ -403,15 +377,13 @@ def upload_pdf():
     if not file.filename.lower().endswith('.pdf'):
         return jsonify({'error': 'Please upload a PDF file'}), 400
     
-    # Save file
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"pdf_{timestamp}_{file.filename}"
-    file_path = os.path.join(flask_app.config['UPLOAD_FOLDER'], filename)
+    file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
     
     try:
         file.save(file_path)
         
-        # Extract text from PDF
         extracted_text, num_pages = extract_text_from_pdf(file_path)
         
         if isinstance(extracted_text, str) and extracted_text.startswith("Error"):
@@ -420,10 +392,8 @@ def upload_pdf():
         pdf_content = extracted_text
         logger.info(f"PDF uploaded: {filename}, {num_pages} pages, {len(extracted_text):,} chars")
         
-        # Create summary
         summary = summarize_pdf_text(extracted_text)
         
-        # Perform simple analysis
         analysis = analyze_content_simple(extracted_text)
         
         response_data = {
@@ -455,7 +425,7 @@ def upload_pdf():
             except:
                 pass
 
-@flask_app.route('/api/scrape_website', methods=['POST'])
+@app.route('/api/scrape_website', methods=['POST'])
 def scrape_website():
     """Handle website scraping for both modes"""
     global web_content
@@ -466,7 +436,6 @@ def scrape_website():
     if not url:
         return jsonify({'error': 'Please provide a website URL'}), 400
     
-    # Scrape website
     scraped_content = scrape_website_simple(url)
     
     if scraped_content.startswith("Error"):
@@ -475,10 +444,8 @@ def scrape_website():
     web_content = scraped_content
     logger.info(f"Website scraped: {url}, {len(scraped_content):,} chars")
     
-    # Create summary
     summary = summarize_web_content(scraped_content)
     
-    # Perform simple analysis
     analysis = analyze_content_simple(scraped_content)
     
     response_data = {
@@ -500,36 +467,7 @@ def scrape_website():
     
     return jsonify(response_data)
 
-@flask_app.route('/api/analyze', methods=['POST'])
-def analyze_content():
-    """API endpoint for content analysis"""
-    data = request.json
-    content_type = data.get("type", "current")
-    
-    content = ""
-    if content_type == "pdf":
-        content = pdf_content
-    elif content_type == "web":
-        content = web_content
-    elif content_type == "current":
-        content = pdf_content if pdf_content else web_content
-    
-    if not content:
-        return jsonify({'error': 'No content available for analysis'}), 400
-    
-    analysis = analyze_content_simple(content)
-    
-    if analysis:
-        return jsonify({
-            'success': True,
-            'analysis': analysis,
-            'content_type': content_type,
-            'content_length': len(content)
-        })
-    else:
-        return jsonify({'error': 'Analysis failed'}), 500
-
-@flask_app.route('/api/chat', methods=['POST'])
+@app.route('/api/chat', methods=['POST'])
 def chat():
     """Handle chat messages for both modes"""
     global chat_mode, pdf_content, web_content
@@ -541,18 +479,15 @@ def chat():
     if not question:
         return jsonify({'error': 'Please enter a question'}), 400
     
-    # Limit chat history size
     if len(chat_history) >= CHAT_HISTORY_LIMIT:
         chat_history.pop(0)
     
-    # Store in history
     chat_history.append({
         'timestamp': datetime.now().isoformat(),
         'question': question,
         'mode': mode
     })
     
-    # Get response based on mode
     if mode == "ai" and ENABLE_AI_MODE:
         response = ai_chat_response(question, pdf_content, web_content)
     else:
@@ -562,7 +497,6 @@ def chat():
         else:
             response = basic_chat_response(question, pdf_content, web_content)
     
-    # Update history with response
     if chat_history:
         chat_history[-1]['response'] = response[:500] + "..." if len(response) > 500 else response
     
@@ -576,7 +510,7 @@ def chat():
         'has_web': len(web_content) > 0
     })
 
-@flask_app.route('/api/set_mode', methods=['POST'])
+@app.route('/api/set_mode', methods=['POST'])
 def set_mode():
     """Set chat mode - User controls this explicitly"""
     global chat_mode
@@ -602,7 +536,7 @@ def set_mode():
         'mode': mode
     })
 
-@flask_app.route('/api/clear_content', methods=['POST'])
+@app.route('/api/clear_content', methods=['POST'])
 def clear_content():
     """Clear loaded content"""
     global pdf_content, web_content
@@ -625,7 +559,7 @@ def clear_content():
         'message': message.strip() or "No content to clear"
     })
 
-@flask_app.route('/api/get_status', methods=['GET'])
+@app.route('/api/get_status', methods=['GET'])
 def get_status():
     """Get current status"""
     return jsonify({
@@ -640,7 +574,7 @@ def get_status():
         'features': ['pdf_analysis', 'web_scraping', 'ai_chat', 'data_analysis']
     })
 
-@flask_app.route('/api/clear_history', methods=['POST'])
+@app.route('/api/clear_history', methods=['POST'])
 def clear_history():
     """Clear chat history"""
     global chat_history
@@ -648,7 +582,7 @@ def clear_history():
     logger.info("Chat history cleared")
     return jsonify({'success': True, 'message': 'Chat history cleared'})
 
-@flask_app.route('/api/test_ai', methods=['GET'])
+@app.route('/api/test_ai', methods=['GET'])
 def test_ai():
     """Test AI connection to DeepSeek"""
     if not ENABLE_AI_MODE:
@@ -691,15 +625,15 @@ def test_ai():
 
 # ========== ERROR HANDLERS ==========
 
-@flask_app.errorhandler(413)
+@app.errorhandler(413)
 def too_large(e):
     return jsonify({'error': f'File too large. Maximum size is {MAX_CONTENT_LENGTH_MB}MB'}), 413
 
-@flask_app.errorhandler(404)
+@app.errorhandler(404)
 def not_found(e):
     return jsonify({'error': 'Resource not found'}), 404
 
-@flask_app.errorhandler(500)
+@app.errorhandler(500)
 def server_error(e):
     logger.error(f"Server error: {str(e)}")
     return jsonify({'error': 'Internal server error'}), 500
@@ -707,23 +641,16 @@ def server_error(e):
 # ========== MAIN ==========
 
 if __name__ == "__main__":
-    # Create directories
-    os.makedirs('templates', exist_ok=True)
-    os.makedirs('static', exist_ok=True)
-    os.makedirs('uploads', exist_ok=True)
-    
-    # Print startup message
     print("=" * 60)
     print("🤖 ChatGenius - Document Assistant")
     print("=" * 60)
     print(f"AI Mode: {'Enabled' if ENABLE_AI_MODE else 'Disabled'}")
     print(f"Default Mode: {DEFAULT_CHAT_MODE}")
-    print(f"Upload Folder: {UPLOAD_FOLDER}")
+    print(f"Upload Folder: {app.config['UPLOAD_FOLDER']}")
     print("=" * 60)
     
-    # Use Render's PORT environment variable
     port = int(os.environ.get("PORT", FLASK_PORT))
     print(f"🌐 Starting server on port {port}")
     print("=" * 60)
     
-    flask_app.run(debug=FLASK_DEBUG, port=port, host=FLASK_HOST)
+    app.run(debug=FLASK_DEBUG, port=port, host=FLASK_HOST)
