@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ASR Innovations - Document Assistant</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <div class="logo">
+                    <i class="fas fa-robot"></i>
+                    <h1>ASR Innovations</h1>
+                </div>
+                <div class="subtitle">
+                    <p>Document Assistant with PDF & Web Scraper</p>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Left Panel - Controls -->
+            <div class="left-panel">
+                <!-- Mode Selection -->
+                <div class="card">
+                    <div class="card-header">
+                        <i class="fas fa-cogs"></i>
+                        <h3>Operation Mode</h3>
+                    </div>
+                    <div class="mode-selection">
+                        <button class="mode-btn active" data-mode="no_ai">
+                            <i class="fas fa-file-alt"></i>
+                            <div class="mode-info">
+                                <h4>Basic Mode</h4>
+                                <p>No AI required</p>
+                            </div>
+                        </button>
+                        <button class="mode-btn" data-mode="ai">
+                            <i class="fas fa-brain"></i>
+                            <div class="mode-info">
+                                <h4>AI Mode</h4>
+                                <p>Powered by DeepSeek-V3.1</p>
+                            </div>
+                        </button>
+                    </div>
+                    <div class="mode-description" id="mode-description">
+                        <p><strong>Basic Mode:</strong> Upload PDFs, scrape websites, and get basic summaries without AI.</p>
+                    </div>
+                </div>
+
+                <!-- PDF Upload Section -->
+                <div class="card">
+                    <div class="card-header">
+                        <i class="fas fa-file-pdf"></i>
+                        <h3>PDF Document</h3>
+                    </div>
+                    <div class="upload-section">
+                        <div class="upload-area" id="pdf-upload-area">
+                            <i class="fas fa-cloud-upload-alt"></i>
+                            <p>Drag & drop PDF or click to browse</p>
+                            <p class="file-size">Max 16MB</p>
+                            <input type="file" id="pdf-file" accept=".pdf" hidden>
+                            <button class="btn btn-outline" onclick="document.getElementById('pdf-file').click()">
+                                <i class="fas fa-folder-open"></i> Select PDF
+                            </button>
+                        </div>
+                        <div id="pdf-result"></div>
+                    </div>
+                </div>
+
+                <!-- Web Scraper Section -->
+                <div class="card">
+                    <div class="card-header">
+                        <i class="fas fa-globe"></i>
+                        <h3>Web Scraper</h3>
+                    </div>
+                    <div class="scraper-section">
+                        <div class="url-input">
+                            <input type="text" id="website-url" placeholder="Enter website URL (https://...)">
+                            <button class="btn btn-primary" onclick="scrapeWebsite()">
+                                <i class="fas fa-download"></i> Scrape
+                            </button>
+                        </div>
+                        <div id="web-result"></div>
+                    </div>
+                </div>
+
+                <!-- Status Panel -->
+                <div class="card status-panel">
+                    <div class="card-header">
+                        <i class="fas fa-info-circle"></i>
+                        <h3>System Status</h3>
+                    </div>
+                    <div class="status-items">
+                        <div class="status-item">
+                            <span class="label">Current Mode:</span>
+                            <span class="value" id="current-mode">Basic</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="label">PDF Content:</span>
+                            <span class="value" id="pdf-status">Not loaded</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="label">Web Content:</span>
+                            <span class="value" id="web-status">Not loaded</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="label">AI Connection:</span>
+                            <span class="value" id="ai-status">Not tested</span>
+                        </div>
+                    </div>
+                    <div class="action-buttons">
+                        <button class="btn btn-small" onclick="clearContent('all')">
+                            <i class="fas fa-trash"></i> Clear All
+                        </button>
+                        <button class="btn btn-small" onclick="testAIConnection()">
+                            <i class="fas fa-wifi"></i> Test AI
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Panel - Chat -->
+            <div class="right-panel">
+                <!-- Chat Header -->
+                <div class="chat-header">
+                    <div class="chat-title">
+                        <i class="fas fa-comments"></i>
+                        <h2>Assistant</h2>
+                    </div>
+                    <div class="chat-actions">
+                        <button class="btn btn-small" onclick="clearChat()">
+                            <i class="fas fa-trash-alt"></i> Clear Chat
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Chat Messages -->
+                <div class="chat-messages" id="chat-messages">
+                    <!-- Welcome Message -->
+                    <div class="message bot-message">
+                        <div class="message-header">
+                            <i class="fas fa-robot"></i>
+                            <span class="sender">RautSpark</span>
+                        </div>
+                        <div class="message-content">
+                            <p>👋 Welcome to <strong>RautSpark</strong>!</p>
+                            <p>I'm your document assistant with two operation modes:</p>
+                            <div class="features">
+                                <div class="feature">
+                                    <i class="fas fa-file-alt"></i>
+                                    <div>
+                                        <h4>📄 Basic Mode (No AI)</h4>
+                                        <ul>
+                                            <li>Upload and extract PDF text</li>
+                                            <li>Scrape website content</li>
+                                            <li>Get automatic summaries</li>
+                                            <li>Basic keyword search</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                                <div class="feature">
+                                    <i class="fas fa-brain"></i>
+                                    <div>
+                                        <h4>🤖 AI Mode</h4>
+                                        <ul>
+                                            <li>Intelligent PDF analysis</li>
+                                            <li>Advanced web content understanding</li>
+                                            <li>Natural conversation</li>
+                                            <li>Context-aware responses</li>
+                                            <li>Powered by DeepSeek-V3.1</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                            <p>To get started, select a mode and upload a PDF or enter a website URL!</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chat Input -->
+                <div class="chat-input">
+                    <div class="input-container">
+                        <input type="text" id="user-input" placeholder="Ask about your documents or websites..." 
+                               onkeypress="if(event.key === 'Enter') sendMessage()">
+                        <button class="btn btn-primary send-btn" onclick="sendMessage()">
+                            <i class="fas fa-paper-plane"></i> Send
+                        </button>
+                    </div>
+                    <div class="input-hints">
+                        <span><i class="fas fa-lightbulb"></i> Try: "What's in my PDF?" or "Summarize the website"</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>ChatGenius v2.0 • Basic Mode & AI Mode • <span id="current-time"></span></p>
+        </footer>
+    </div>
+    <div class="feature">
+    <i class="fas fa-brain"></i>
+    <div>
+        <h4>🤖 AI Mode</h4>
+        <ul>
+            <li>Intelligent PDF analysis</li>
+            <li>Advanced web content understanding</li>
+            <li>Natural conversation</li>
+            <li>Context-aware responses</li>
+            <li>Powered by DeepSeek-V3.1</li>
+            <li><strong>Mode selection is user-controlled</strong></li>
+        </ul>
+    </div>
+</div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loading-overlay">
+        <div class="loading-content">
+            <div class="spinner">
+                <i class="fas fa-spinner fa-spin"></i>
+            </div>
+            <p id="loading-text">Processing...</p>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
