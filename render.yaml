@@ -1,32 +1,23 @@
-# render.yaml
 services:
   - type: web
     name: asr-innovations-document-assistant
     env: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app
     region: ohio
     plan: free
     
-    # Use Python 3.11 for better compatibility
-    pythonVersion: "3.11.9"
-    
     # Build Configuration
     buildCommand: |
-      pip install --upgrade pip setuptools wheel
       pip install -r requirements.txt
       mkdir -p templates static uploads
     
-    # Start Command
-    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT
+    # Start Command - MUST be exactly this
+    startCommand: gunicorn app:app
     
     # Health Check
     healthCheckPath: /
     
     # Environment Variables
     envVars:
-      - key: PORT
-        value: "10000"
       - key: FLASK_DEBUG
         value: "False"
       - key: SECRET_KEY
@@ -37,18 +28,18 @@ services:
         value: "16"
       - key: CHAT_HISTORY_LIMIT
         value: "100"
-      - key: RATE_LIMIT_PER_MINUTE
-        value: "60"
       - key: ENABLE_AI_MODE
         value: "True"
       - key: DEFAULT_CHAT_MODE
         value: "no_ai"
+      
+      # DeepSeek API Configuration (add your key in Render dashboard)
+      - key: DEEPSEEK_API_KEY
+        sync: false
+      - key: DEEPSEEK_BASE_URL
+        value: "https://api.deepseek.com"
+      - key: MODEL_NAME
+        value: "deepseek-chat"
     
-    # Disk Configuration
-    disk:
-      name: uploads
-      mountPath: /opt/render/project/src/uploads
-      sizeGB: 1
-
     # Auto-Deploy
     autoDeploy: true
