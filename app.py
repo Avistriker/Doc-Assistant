@@ -1,8 +1,7 @@
 import os
-import PyPDF2 as pdf
+import PyPDF2
 import requests
 from flask import Flask, render_template, request, jsonify
-from urllib.parse import urlparse
 from datetime import datetime
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
@@ -22,8 +21,8 @@ logger = logging.getLogger(__name__)
 
 # DeepSeek API configuration
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
-DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.sambanova.ai/v1")
-MODEL_NAME = os.getenv("MODEL_NAME", "DeepSeek-V3.1")
+DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+MODEL_NAME = os.getenv("MODEL_NAME", "deepseek-chat")
 
 # Flask configuration
 FLASK_DEBUG = os.getenv("FLASK_DEBUG", "False").lower() == "true"
@@ -39,13 +38,13 @@ ENABLE_AI_MODE = os.getenv("ENABLE_AI_MODE", "True").lower() == "true"
 DEFAULT_CHAT_MODE = os.getenv("DEFAULT_CHAT_MODE", "no_ai")
 
 # Initialize Flask app
-app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-app.config['MAX_CONTENT_LENGTH'] = MAX_CONTENT_LENGTH_MB * 1024 * 1024
-app.config['SECRET_KEY'] = SECRET_KEY
+flask_app = Flask(__name__)  # Changed from 'app' to 'flask_app' to avoid conflict
+flask_app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+flask_app.config['MAX_CONTENT_LENGTH'] = MAX_CONTENT_LENGTH_MB * 1024 * 1024
+flask_app.config['SECRET_KEY'] = SECRET_KEY
 
 # Create upload directory
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+os.makedirs(flask_app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 # Global variables to store content
 pdf_content = ""
@@ -60,7 +59,7 @@ def extract_text_from_pdf(file_path):
     text = ""
     try:
         with open(file_path, "rb") as file:
-            reader = pdf.PdfReader(file)
+            reader = PyPDF2.PdfReader(file)
             num_pages = len(reader.pages)
             
             for page_num in range(num_pages):
@@ -288,7 +287,7 @@ def basic_chat_response(question, pdf_text, web_text):
 # ========== AI FUNCTIONS ==========
 
 def call_deepseek_api(messages, temperature=0.1, top_p=0.1, max_tokens=2000):
-    """Call DeepSeek-V3.1 API for AI responses"""
+    """Call DeepSeek API for AI responses"""
     if not DEEPSEEK_API_KEY:
         logger.warning("AI mode called but no API key configured")
         return "AI mode is not configured. Please check API settings in environment variables."
@@ -330,7 +329,7 @@ def call_deepseek_api(messages, temperature=0.1, top_p=0.1, max_tokens=2000):
         return f"Connection error: {str(e)}"
 
 def ai_chat_response(question, pdf_text, web_text):
-    """AI-powered chat response using DeepSeek-V3.1"""
+    """AI-powered chat response using DeepSeek"""
     if not ENABLE_AI_MODE:
         return "AI mode is disabled. Please enable it in the configuration."
     
@@ -347,7 +346,7 @@ def ai_chat_response(question, pdf_text, web_text):
     
     context = "\n\n".join(context_parts)
     
-    system_prompt = """You are ChatGenius, a helpful AI assistant powered by DeepSeek-V3.1. 
+    system_prompt = """You are ChatGenius, a helpful AI assistant powered by DeepSeek. 
 Answer questions based on the provided context when available. 
 If the context doesn't contain the answer, provide a helpful general response.
 Be concise but informative, and format your responses clearly with proper paragraphs.
@@ -382,14 +381,14 @@ When analyzing PDF or web content, provide detailed insights, summaries, and ans
 
 # ========== ROUTES ==========
 
-@app.route('/')
+@flask_app.route('/')
 def index():
     """Render main chat interface"""
     return render_template('chat.html', 
                          ai_enabled=ENABLE_AI_MODE,
                          default_mode=DEFAULT_CHAT_MODE)
 
-@app.route('/api/upload_pdf', methods=['POST'])
+@flask_app.route('/api/upload_pdf', methods=['POST'])
 def upload_pdf():
     """Handle PDF upload for both modes"""
     global pdf_content
@@ -407,7 +406,7 @@ def upload_pdf():
     # Save file
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"pdf_{timestamp}_{file.filename}"
-    file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    file_path = os.path.join(flask_app.config['UPLOAD_FOLDER'], filename)
     
     try:
         file.save(file_path)
@@ -456,7 +455,7 @@ def upload_pdf():
             except:
                 pass
 
-@app.route('/api/scrape_website', methods=['POST'])
+@flask_app.route('/api/scrape_website', methods=['POST'])
 def scrape_website():
     """Handle website scraping for both modes"""
     global web_content
@@ -501,7 +500,7 @@ def scrape_website():
     
     return jsonify(response_data)
 
-@app.route('/api/analyze', methods=['POST'])
+@flask_app.route('/api/analyze', methods=['POST'])
 def analyze_content():
     """API endpoint for content analysis"""
     data = request.json
@@ -530,7 +529,7 @@ def analyze_content():
     else:
         return jsonify({'error': 'Analysis failed'}), 500
 
-@app.route('/api/chat', methods=['POST'])
+@flask_app.route('/api/chat', methods=['POST'])
 def chat():
     """Handle chat messages for both modes"""
     global chat_mode, pdf_content, web_content
@@ -577,7 +576,7 @@ def chat():
         'has_web': len(web_content) > 0
     })
 
-@app.route('/api/set_mode', methods=['POST'])
+@flask_app.route('/api/set_mode', methods=['POST'])
 def set_mode():
     """Set chat mode - User controls this explicitly"""
     global chat_mode
@@ -603,7 +602,7 @@ def set_mode():
         'mode': mode
     })
 
-@app.route('/api/clear_content', methods=['POST'])
+@flask_app.route('/api/clear_content', methods=['POST'])
 def clear_content():
     """Clear loaded content"""
     global pdf_content, web_content
@@ -626,7 +625,7 @@ def clear_content():
         'message': message.strip() or "No content to clear"
     })
 
-@app.route('/api/get_status', methods=['GET'])
+@flask_app.route('/api/get_status', methods=['GET'])
 def get_status():
     """Get current status"""
     return jsonify({
@@ -641,7 +640,7 @@ def get_status():
         'features': ['pdf_analysis', 'web_scraping', 'ai_chat', 'data_analysis']
     })
 
-@app.route('/api/clear_history', methods=['POST'])
+@flask_app.route('/api/clear_history', methods=['POST'])
 def clear_history():
     """Clear chat history"""
     global chat_history
@@ -649,9 +648,9 @@ def clear_history():
     logger.info("Chat history cleared")
     return jsonify({'success': True, 'message': 'Chat history cleared'})
 
-@app.route('/api/test_ai', methods=['GET'])
+@flask_app.route('/api/test_ai', methods=['GET'])
 def test_ai():
-    """Test AI connection to DeepSeek-V3.1"""
+    """Test AI connection to DeepSeek"""
     if not ENABLE_AI_MODE:
         return jsonify({
             'success': False,
@@ -666,14 +665,14 @@ def test_ai():
     
     try:
         test_response = call_deepseek_api([
-            {"role": "system", "content": "You are a helpful assistant. Respond with exactly: 'AI connection successful to DeepSeek-V3.1'"},
+            {"role": "system", "content": "You are a helpful assistant. Respond with exactly: 'AI connection successful to DeepSeek'"},
             {"role": "user", "content": "Test connection"}
         ], max_tokens=50)
         
         if "ai connection successful" in test_response.lower():
             return jsonify({
                 'success': True,
-                'message': '✅ DeepSeek-V3.1 Connection Successful',
+                'message': '✅ DeepSeek Connection Successful',
                 'response': test_response
             })
         else:
@@ -686,21 +685,21 @@ def test_ai():
         logger.error(f"AI test failed: {str(e)}")
         return jsonify({
             'success': False,
-            'message': '❌ DeepSeek-V3.1 Connection Failed',
+            'message': '❌ DeepSeek Connection Failed',
             'error': str(e)
         })
 
 # ========== ERROR HANDLERS ==========
 
-@app.errorhandler(413)
+@flask_app.errorhandler(413)
 def too_large(e):
     return jsonify({'error': f'File too large. Maximum size is {MAX_CONTENT_LENGTH_MB}MB'}), 413
 
-@app.errorhandler(404)
+@flask_app.errorhandler(404)
 def not_found(e):
     return jsonify({'error': 'Resource not found'}), 404
 
-@app.errorhandler(500)
+@flask_app.errorhandler(500)
 def server_error(e):
     logger.error(f"Server error: {str(e)}")
     return jsonify({'error': 'Internal server error'}), 500
@@ -727,4 +726,4 @@ if __name__ == "__main__":
     print(f"🌐 Starting server on port {port}")
     print("=" * 60)
     
-    app.run(debug=FLASK_DEBUG, port=port, host=FLASK_HOST)
+    flask_app.run(debug=FLASK_DEBUG, port=port, host=FLASK_HOST)
