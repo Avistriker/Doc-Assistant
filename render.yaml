@@ -5,18 +5,15 @@ services:
     region: ohio
     plan: free
     
-    # Build Configuration
     buildCommand: |
       pip install -r requirements.txt
       mkdir -p templates static uploads
     
-    # Start Command - MUST be exactly this
-    startCommand: gunicorn app:app
+    # CHANGE THIS LINE:
+    startCommand: gunicorn wsgi:app
     
-    # Health Check
     healthCheckPath: /
     
-    # Environment Variables
     envVars:
       - key: FLASK_DEBUG
         value: "False"
@@ -33,7 +30,6 @@ services:
       - key: DEFAULT_CHAT_MODE
         value: "no_ai"
       
-      # DeepSeek API Configuration (add your key in Render dashboard)
       - key: DEEPSEEK_API_KEY
         sync: false
       - key: DEEPSEEK_BASE_URL
@@ -41,5 +37,4 @@ services:
       - key: MODEL_NAME
         value: "deepseek-chat"
     
-    # Auto-Deploy
     autoDeploy: true
