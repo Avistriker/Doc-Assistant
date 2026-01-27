@@ -1,5 +1,6 @@
 Flask==3.1.0
 gunicorn==24.0.0
+uvicorn[standard]==0.34.0  # Add this line
 requests==2.31.0
 beautifulsoup4==4.12.2
 PyPDF2==3.0.1
